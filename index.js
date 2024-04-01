@@ -6,8 +6,8 @@ const config = {
 	entryFile: './input.txt',
 	chunkDir: 'chunk',
 	orderBy: 'asc',
-	heatSize: Sizes.KB * 10,
-	removeChunks: true,
+	heatSize: Sizes.MB * 500,
+	removeChunks: false,
 	useLocaleOrder: true,
 };
 
