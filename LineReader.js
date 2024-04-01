@@ -82,6 +82,7 @@ class LineReader extends EventEmitter {
 		if (!this._finished) {
 			this._finished = true;
 			this.emit('finish');
+			this.close();
 		}
 	}
 
