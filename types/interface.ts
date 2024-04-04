@@ -1,7 +1,4 @@
-enum ExternalSortOrder {
-	ASC = 'asc',
-	DESC = 'desc',
-}
+import { ExternalSortOrder } from './enum';
 
 interface ExternalSortConfig {
 	outputFile: string;
@@ -20,5 +17,4 @@ interface LineReaderConfig {
 
 type ComparerFN = (a: string, b: string) => number;
 
-export { ExternalSortOrder };
 export type { ExternalSortConfig, ComparerFN, LineReaderConfig };

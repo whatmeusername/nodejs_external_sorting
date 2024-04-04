@@ -2,7 +2,8 @@ import { createWriteStream, createReadStream, readdirSync, mkdirSync, existsSync
 import { createInterface } from 'readline';
 import { LineReader } from './LineReader';
 
-import { ExternalSortConfig, ComparerFN, ExternalSortOrder } from './interface';
+import { ExternalSortConfig, ComparerFN } from '../types/interface';
+import { ExternalSortOrder } from '../types/enum';
 
 class ExternalSort {
 	private outputFile: string;

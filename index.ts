@@ -1,11 +1,11 @@
-import { Sizes } from './const';
-import { ExternalSort } from './ExternalSort';
-import { ExternalSortOrder } from './interface';
+import { Sizes } from './const/const';
+import { ExternalSort } from './src/ExternalSort';
+import { ExternalSortOrder } from './types/enum';
 
 const config = {
-	outputFile: 'output.txt',
+	outputFile: './output.txt',
 	entryFile: './input.txt',
-	chunkDir: 'chunk',
+	chunkDir: './chunk',
 	orderBy: ExternalSortOrder.ASC,
 	heatSize: Sizes.MB * 500,
 	removeChunks: false,

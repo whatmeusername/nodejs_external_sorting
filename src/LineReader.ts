@@ -1,7 +1,7 @@
 import { ReadStream, createReadStream } from 'fs';
 import { StringDecoder } from 'string_decoder';
 import { EventEmitter } from 'events';
-import { LineReaderConfig } from './interface';
+import { LineReaderConfig } from '../types/interface';
 
 // примерная реализация readline.createInterface в которой мы сможем контролировать поток строк, ставить его на паузу в любой момент без задержек
 // в отличие readline.createInterface в котором паузу происходит не сразу, а с задержокой, что не подходит для реализации курсоров
