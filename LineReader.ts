@@ -1,14 +1,27 @@
-import fs from 'fs';
+import { ReadStream, createReadStream } from 'fs';
 import { StringDecoder } from 'string_decoder';
 import { EventEmitter } from 'events';
+import { LineReaderConfig } from './interface';
 
 // примерная реализация readline.createInterface в которой мы сможем контролировать поток строк, ставить его на паузу в любой момент без задержек
 // в отличие readline.createInterface в котором паузу происходит не сразу, а с задержокой, что не подходит для реализации курсоров
 class LineReader extends EventEmitter {
-	constructor(filepath, readerConfig, config) {
+	private _encoding: BufferEncoding;
+	private filterEmpty: boolean;
+	private filepath: string;
+	private lines: string[];
+	private lineFragment: string;
+	private _paused: boolean;
+	private _finished: boolean;
+	private _ended: boolean;
+	private decoder: StringDecoder;
+
+	private readStream: ReadStream;
+
+	constructor(filepath: string, readerConfig: Parameters<typeof createReadStream>[1], config: LineReaderConfig) {
 		super();
 
-		this.encoding = config?.encoding ?? 'utf8';
+		this._encoding = config?.encoding ?? 'utf8';
 		this.filterEmpty = config?.filterEmpty ?? false;
 		this.filepath = filepath;
 		this.lines = [];
@@ -18,11 +31,11 @@ class LineReader extends EventEmitter {
 		this._ended = false;
 		this.decoder = new StringDecoder(this._encoding);
 
-		this.readStream = this.initReadStream(readerConfig);
+		this.readStream = this._initReadStream(readerConfig);
 	}
 
-	initReadStream(readerConfig) {
-		const readStream = fs.createReadStream(this.filepath, readerConfig);
+	private _initReadStream(readerConfig: Parameters<typeof createReadStream>[1]) {
+		const readStream = createReadStream(this.filepath, readerConfig);
 
 		readStream.on('error', (err) => this.emit('error', err));
 
@@ -30,18 +43,13 @@ class LineReader extends EventEmitter {
 
 		readStream.on('data', (data) => {
 			this.readStream.pause();
-			// Декодируем полученный чаннк данных из буфера в строку
-			const decodedData = data instanceof Buffer ? this.decoder.write(data) : data;
+			// Декодируем полученный чанк данных из буфера в строку и сразу разделяем на строки
+			this.lines = (data instanceof Buffer ? this.decoder.write(data) : data).split(/\r?\n/g);
 
-			this.lines = decodedData.split(/\r?\n/g);
-
-			if (this.filterEmpty) this.lines.filter((l) => l.length > 0);
-
+			if (this.filterEmpty) this.lines = this.lines.filter((l) => l.length > 0);
 			this.lines[0] = this.lineFragment + this.lines[0];
 			// Так как последняя строка может быть не полная из-за размера буфера, то сохраняем ее для востановление при получение нового чанка
 			this.lineFragment = this.lines.pop() ?? '';
-
-			// Создаем макрозадачу, что бы не блокировать весь поток постоянным вызом next
 			setImmediate(() => this.next());
 		});
 
@@ -49,15 +57,14 @@ class LineReader extends EventEmitter {
 			if (this.lines.length === 0) this._finish();
 			this._ended = true;
 			this.emit('end');
-			// Создаем макрозадачу, что бы не блокировать весь поток постоянным вызом next
 			setImmediate(() => this.next());
 		});
 
-		this.readStreamd = readStream;
+		this.readStream = readStream;
 		return readStream;
 	}
 
-	next() {
+	private next() {
 		// Отдаем строки до тех пор, пока не закончатся чанки или поток не будет поставлен на паузу
 		if (this._paused) return;
 		else if (this.lines.length === 0) {
@@ -73,12 +80,10 @@ class LineReader extends EventEmitter {
 		}
 
 		this.emit('line', this.lines.shift());
-
-		// Создаем макрозадачу, что бы не блокировать весь поток постоянным вызом next
 		setImmediate(() => this.next());
 	}
 
-	_finish() {
+	private _finish() {
 		if (!this._finished) {
 			this._finished = true;
 			this.emit('finish');
@@ -86,27 +91,25 @@ class LineReader extends EventEmitter {
 		}
 	}
 
-	pause() {
+	public pause() {
 		this._paused = true;
 	}
 
-	resume() {
+	public resume() {
 		this._paused = false;
-		// Создаем макрозадачу, что бы не блокировать весь поток постоянным вызом next
 		setImmediate(() => this.next());
 	}
 
-	end() {
+	public end() {
 		if (this._ended) return;
 		this._ended = true;
 		this.emit('end');
 	}
 
-	close() {
+	public close() {
 		this.readStream.destroy();
 		this._ended = true;
-		this._lines = [];
-		// Создаем макрозадачу, что бы не блокировать весь поток постоянным вызом next
+		this.lines = [];
 		setImmediate(() => this.next());
 	}
 }

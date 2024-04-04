@@ -3,3 +3,4 @@ node_modules
 chunk
 output.txt
 input.txt
+dist
