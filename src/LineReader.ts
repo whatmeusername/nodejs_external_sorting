@@ -34,7 +34,7 @@ class LineReader extends EventEmitter {
 		this.readStream = this._initReadStream(readerConfig);
 	}
 
-	private _initReadStream(readerConfig: Parameters<typeof createReadStream>[1]) {
+	private _initReadStream(readerConfig: Parameters<typeof createReadStream>[1]): ReadStream {
 		const readStream = createReadStream(this.filepath, readerConfig);
 
 		readStream.on('error', (err) => this.emit('error', err));
@@ -64,7 +64,7 @@ class LineReader extends EventEmitter {
 		return readStream;
 	}
 
-	private next() {
+	private next(): void {
 		// Отдаем строки до тех пор, пока не закончатся чанки или поток не будет поставлен на паузу
 		if (this._paused) return;
 		else if (this.lines.length === 0) {
@@ -83,7 +83,7 @@ class LineReader extends EventEmitter {
 		setImmediate(() => this.next());
 	}
 
-	private _finish() {
+	private _finish(): void {
 		if (!this._finished) {
 			this._finished = true;
 			this.emit('finish');
@@ -91,22 +91,22 @@ class LineReader extends EventEmitter {
 		}
 	}
 
-	public pause() {
+	public pause(): void {
 		this._paused = true;
 	}
 
-	public resume() {
+	public resume(): void {
 		this._paused = false;
 		setImmediate(() => this.next());
 	}
 
-	public end() {
+	public end(): void {
 		if (this._ended) return;
 		this._ended = true;
 		this.emit('end');
 	}
 
-	public close() {
+	public close(): void {
 		this.readStream.destroy();
 		this._ended = true;
 		this.lines = [];

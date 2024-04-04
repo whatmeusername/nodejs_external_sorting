@@ -25,7 +25,12 @@ class ExternalSort {
 		this.useLocaleOrder = config?.useLocaleOrder ?? true; // определяет какой подход к сортировке мы использем, через localeCompare или операторы сравнения
 	}
 
-	private async _WriteChunkFile(data: string[], i: number, comparer: ComparerFN, writerHeatSize: number) {
+	private async _WriteChunkFile(
+		data: string[],
+		i: number,
+		comparer: ComparerFN,
+		writerHeatSize: number,
+	): Promise<null | undefined | Error> {
 		writerHeatSize = writerHeatSize ?? Math.ceil(this.heatSize * 0.2);
 		data = data.sort(comparer);
 
@@ -95,7 +100,7 @@ class ExternalSort {
 		if (data.length > 0) await this._WriteChunkFile(data, ti++, comparer, writerHeatSize);
 	}
 
-	private async _MergeSortedFiles() {
+	private async _MergeSortedFiles(): Promise<string[]> {
 		// Получаем список чанков, фильтруем, что бы избавиться от системных файлов (пример .DS_STORE)
 		const chunkFiles = readdirSync(this.chunkDir).filter((file) => file.startsWith('chunk'));
 
@@ -120,7 +125,7 @@ class ExternalSort {
 			}
 		};
 
-		const readerPromises = chunkFiles.map((name) => {
+		const readerPromises: Promise<string>[] = chunkFiles.map((name) => {
 			return new Promise((res) => {
 				// Делаем курсор для каждого потока
 				const reader = new LineReader(
@@ -152,19 +157,19 @@ class ExternalSort {
 		return Promise.all(readerPromises);
 	}
 
-	private _clearChunkDir() {
+	private _clearChunkDir(): void {
 		if (existsSync(this.chunkDir)) {
 			rmSync(this.chunkDir, { recursive: true, force: true });
 		}
 	}
 
-	private _createChunkDir() {
+	private _createChunkDir(): void {
 		if (!existsSync(this.chunkDir)) {
 			mkdirSync(this.chunkDir);
 		}
 	}
 
-	public async sort() {
+	public async sort(): Promise<void> {
 		// если исходного файла по данному пути не существует выбрасываем исключение
 		if (existsSync(this.entryFile) === false) throw new Error(`Entry file: ${this.entryFile} does not exist`);
 		// Удаляем предыдущие чанки если они есть
