@@ -13,6 +13,8 @@ class ExternalSort {
 	private removeChunks: boolean;
 	private orderBy: ExternalSortOrder;
 	private useLocaleOrder: boolean;
+	private chunksPointerLimit: number;
+	private chunkFilename: string;
 
 	// Конфигурация для внешний сортировки
 	constructor(config: ExternalSortConfig) {
@@ -23,6 +25,8 @@ class ExternalSort {
 		this.removeChunks = config?.removeChunks ?? false; // параметр определяющий удаление директории с чанками после заверщение сортировки
 		this.orderBy = config?.orderBy ?? ExternalSortOrder.ASC; // определяет тип сортировки (возрастание и убывание)
 		this.useLocaleOrder = config?.useLocaleOrder ?? true; // определяет какой подход к сортировке мы использем, через localeCompare или операторы сравнения
+		this.chunksPointerLimit = config?.chunksPointerLimit ?? 100; // определяет максимальное количество курсоров в одно время
+		this.chunkFilename = config?.chunkFilename ?? 'chunk'; // название файла чанка
 	}
 
 	private async _WriteChunkFile(
@@ -88,28 +92,54 @@ class ExternalSort {
 
 		for await (const line of rl) {
 			size += line.length;
+			data.push(line);
 			if (size >= chunkDataHeatSize) {
 				await this._WriteChunkFile(data, ti++, comparer, writerHeatSize);
 				size = 0;
 				data = [];
 			}
-			data.push(line);
 		}
 
 		// Сохраняем оставшийся строки в чанк
 		if (data.length > 0) await this._WriteChunkFile(data, ti++, comparer, writerHeatSize);
 	}
 
-	private async _MergeSortedFiles(): Promise<string[]> {
+	private async _StartChunkSorting(): Promise<void | string[]> {
 		// Получаем список чанков, фильтруем, что бы избавиться от системных файлов (пример .DS_STORE)
-		const chunkFiles = readdirSync(this.chunkDir).filter((file) => file.startsWith('chunk'));
+		const chunkFiles = readdirSync(this.chunkDir)
+			.filter((file) => file.startsWith(this.chunkFilename))
+			.map((file) => `${this.chunkDir}/${file}`);
 
+		if (this.chunksPointerLimit >= chunkFiles.length)
+			return this._MergeChunksByPointers(chunkFiles, this.outputFile);
+
+		const subChunksFiles: string[] = [];
+		let offset = 0;
+		let i = 0;
+
+		return new Promise(async (resolve) => {
+			while (offset < chunkFiles.length) {
+				const subChunksFile = `${this.chunkDir}/sub_${this.chunkFilename}_${i++}.tmp`;
+				await this._MergeChunksByPointers(
+					chunkFiles.slice(offset, this.chunksPointerLimit + offset),
+					subChunksFile,
+				);
+				offset += this.chunksPointerLimit;
+				subChunksFiles.push(subChunksFile);
+			}
+			this._MergeChunksByPointers(subChunksFiles, this.outputFile).then((res) => {
+				resolve(res);
+			});
+		});
+	}
+
+	private async _MergeChunksByPointers(chunkFiles: string[], outFileDir: string): Promise<string[]> {
 		// Распредляем память для всех опреаций (оставляем немного памяти для данных из курсоров (linesData))
 		const readerHeatSize = Math.floor((this.heatSize * 0.8) / chunkFiles.length); // пропорционально разделяем память на каждый поток (курсор)
 		const writerHeatSize = Math.floor(this.heatSize * 0.1);
 
 		// Создаем поток для запись результата, даем минимальное количество памяти, так как сборщик мусора будет очищать его между работой курсоров
-		const writer = createWriteStream(this.outputFile, { highWaterMark: writerHeatSize });
+		const writer = createWriteStream(outFileDir, { highWaterMark: writerHeatSize });
 
 		const comparer = this._getComparer();
 		let FilesToFinish = chunkFiles.length;
@@ -125,11 +155,11 @@ class ExternalSort {
 			}
 		};
 
-		const readerPromises: Promise<string>[] = chunkFiles.map((name) => {
+		const readerPromises: Promise<string>[] = chunkFiles.map((file) => {
 			return new Promise((res) => {
-				// Делаем курсор для каждого потока
+				// Делаем курсор для каждого чанка
 				const reader = new LineReader(
-					`${this.chunkDir}/${name}`,
+					file,
 					{ highWaterMark: readerHeatSize },
 					{ encoding: 'utf8', filterEmpty: true },
 				);
@@ -144,10 +174,10 @@ class ExternalSort {
 				reader.once('finish', () => {
 					// При завершения работы потока убираем его из общего количества чанков для записи
 					--FilesToFinish;
-					if (FilesToFinish > 0) ProcessLine();
+					if (FilesToFinish > 0 || linesData.length > 0) ProcessLine();
 				});
 
-				reader.once('end', () => res(name));
+				reader.once('end', () => res(file));
 
 				return reader;
 			});
@@ -178,7 +208,7 @@ class ExternalSort {
 		// Ожидаем разделения на чанки
 		await this._SplitIntoChunks();
 		//Ожидаем сортировки чанков в единный файл
-		await this._MergeSortedFiles();
+		await this._StartChunkSorting();
 		if (this.removeChunks) this._clearChunkDir();
 	}
 }

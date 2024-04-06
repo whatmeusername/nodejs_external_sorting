@@ -8,6 +8,8 @@ interface ExternalSortConfig {
 	heatSize: number;
 	removeChunks?: boolean;
 	useLocaleOrder?: boolean;
+	chunksPointerLimit?: number;
+	chunkFilename?: string;
 }
 
 interface LineReaderConfig {

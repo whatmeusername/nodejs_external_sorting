@@ -45,16 +45,16 @@ class LineReader extends EventEmitter {
 			this.readStream.pause();
 			// Декодируем полученный чанк данных из буфера в строку и сразу разделяем на строки
 			this.lines = (data instanceof Buffer ? this.decoder.write(data) : data).split(/\r?\n/g);
-
-			if (this.filterEmpty) this.lines = this.lines.filter((l) => l.length > 0);
 			this.lines[0] = this.lineFragment + this.lines[0];
 			// Так как последняя строка может быть не полная из-за размера буфера, то сохраняем ее для востановление при получение нового чанка
 			this.lineFragment = this.lines.pop() ?? '';
+
+			if (this.filterEmpty) this.lines = this.lines.filter((l) => l.length > 0);
 			setImmediate(() => this.next());
 		});
 
 		readStream.on('end', () => {
-			if (this.lines.length === 0) this._finish();
+			if (this.lines.length === 0 && this.lineFragment === '') this._finish();
 			this._ended = true;
 			this.emit('end');
 			setImmediate(() => this.next());
@@ -71,6 +71,7 @@ class LineReader extends EventEmitter {
 			if (this._ended) {
 				// Если поток чанков закончился то отдаем последнию строку если она есть
 				if (this.lineFragment) {
+					console.log(this.lineFragment, '--------');
 					this.emit('line', this.lineFragment);
 					this.lineFragment = '';
 				} else this._finish();
