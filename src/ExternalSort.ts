@@ -25,7 +25,8 @@ class ExternalSort {
 		this.removeChunks = config?.removeChunks ?? false; // параметр определяющий удаление директории с чанками после заверщение сортировки
 		this.orderBy = config?.orderBy ?? ExternalSortOrder.ASC; // определяет тип сортировки (возрастание и убывание)
 		this.useLocaleOrder = config?.useLocaleOrder ?? true; // определяет какой подход к сортировке мы использем, через localeCompare или операторы сравнения
-		this.chunksPointerLimit = config?.chunksPointerLimit ?? 100; // определяет максимальное количество курсоров в одно время
+		this.chunksPointerLimit =
+			config?.chunksPointerLimit && config?.chunksPointerLimit >= 2 ? config?.chunksPointerLimit : 50; // определяет максимальное количество курсоров в одно время
 		this.chunkFilename = config?.chunkFilename ?? 'chunk'; // название файла чанка
 	}
 
@@ -106,28 +107,40 @@ class ExternalSort {
 
 	private async _StartChunkSorting(): Promise<void | string[]> {
 		// Получаем список чанков, фильтруем, что бы избавиться от системных файлов (пример .DS_STORE)
-		const chunkFiles = readdirSync(this.chunkDir)
+		let chunkFiles = readdirSync(this.chunkDir)
 			.filter((file) => file.startsWith(this.chunkFilename))
 			.map((file) => `${this.chunkDir}/${file}`);
 
 		if (this.chunksPointerLimit >= chunkFiles.length)
 			return this._MergeChunksByPointers(chunkFiles, this.outputFile);
 
-		const subChunksFiles: string[] = [];
-		let offset = 0;
-		let i = 0;
+		let subPrefix = 0;
+
+		const ProcessChunk = async (cf: string[]): Promise<string[]> => {
+			let i = 0;
+			let offset = 0;
+			const subChunksFiles: string[] = [];
+			while (offset < cf.length) {
+				const filesSlice = cf.slice(offset, this.chunksPointerLimit + offset);
+				if (filesSlice.length === 1) {
+					subChunksFiles.push(filesSlice[0]);
+					break;
+				} else {
+					const subChunksFile = `${this.chunkDir}/sub${subPrefix}_${this.chunkFilename}_${i++}.tmp`;
+					await this._MergeChunksByPointers(filesSlice, subChunksFile);
+					offset += this.chunksPointerLimit;
+					subChunksFiles.push(subChunksFile);
+				}
+			}
+			return subChunksFiles;
+		};
 
 		return new Promise(async (resolve) => {
-			while (offset < chunkFiles.length) {
-				const subChunksFile = `${this.chunkDir}/sub_${this.chunkFilename}_${i++}.tmp`;
-				await this._MergeChunksByPointers(
-					chunkFiles.slice(offset, this.chunksPointerLimit + offset),
-					subChunksFile,
-				);
-				offset += this.chunksPointerLimit;
-				subChunksFiles.push(subChunksFile);
+			while (chunkFiles.length > this.chunksPointerLimit) {
+				chunkFiles = await ProcessChunk(chunkFiles);
+				subPrefix++;
 			}
-			this._MergeChunksByPointers(subChunksFiles, this.outputFile).then((res) => {
+			this._MergeChunksByPointers(chunkFiles, this.outputFile).then((res) => {
 				resolve(res);
 			});
 		});
