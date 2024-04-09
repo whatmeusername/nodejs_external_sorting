@@ -135,15 +135,11 @@ class ExternalSort {
 			return subChunksFiles;
 		};
 
-		return new Promise(async (resolve) => {
-			while (chunkFiles.length > this.chunksPointerLimit) {
-				chunkFiles = await ProcessChunk(chunkFiles);
-				subPrefix++;
-			}
-			this._MergeChunksByPointers(chunkFiles, this.outputFile).then((res) => {
-				resolve(res);
-			});
-		});
+		while (chunkFiles.length > this.chunksPointerLimit) {
+			chunkFiles = await ProcessChunk(chunkFiles);
+			subPrefix++;
+		}
+		return this._MergeChunksByPointers(chunkFiles, this.outputFile);
 	}
 
 	private async _MergeChunksByPointers(chunkFiles: string[], outFileDir: string): Promise<string[]> {
